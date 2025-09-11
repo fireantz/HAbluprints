@@ -3,7 +3,7 @@ blueprint:
   description: >
     Turns off selected lights only after ALL chosen motion/occupancy sensors
     have been clear (off) for the entire delay period. Works with mixed sensors
-    (e.g., PIR, mmWave, Third Reality 3RMS16BZ via ZHA/Zigbee2MQTT).
+    (e.g., PIR, mmWave, Third Reality 3RMS16BZ).
   domain: automation
   input:
     presence_sensors:
@@ -32,10 +32,22 @@ blueprint:
 
 mode: restart
 
-# Re-evaluate whenever any sensor changes, or on reload/start
 trigger:
   - platform: state
     entity_id: !input presence_sensors
-  - platform: homeassistant
-    event: start
-  - pl
+    to: "off"
+    for: !input delay_time
+
+condition:
+  - condition: state
+    entity_id: !input target_light
+    state: "on"
+  # Make sure all sensors are actually off
+  - condition: template
+    value_template: >
+      {% set sensors = expand(!input presence_sensors) %}
+      {{ sensors | selectattr('state','eq','on') | list | count == 0 }}
+
+action:
+  - service: light.turn_off
+    target: !input target_light
