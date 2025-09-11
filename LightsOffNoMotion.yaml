@@ -1,0 +1,42 @@
+blueprint:
+  name: Auto Turn Off Lights After No Motion
+  description: Turns off selected lights if no motion is detected for a set period of time.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Motion Sensor
+      description: The motion sensor for the room
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: motion
+    target_light:
+      name: Light
+      description: The light or light group to turn off
+      selector:
+        entity:
+          domain: light
+    delay_time:
+      name: Delay (No Motion Time)
+      description: Time to wait after no motion before turning off the light
+      default: 02:00:00
+      selector:
+        duration: {}
+
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "off"
+    for: !input delay_time
+
+condition:
+  - condition: state
+    entity_id: !input target_light
+    state: "on"
+
+action:
+  - service: light.turn_off
+    target:
+      entity_id: !input target_light
