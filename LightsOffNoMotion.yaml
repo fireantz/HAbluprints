@@ -11,7 +11,7 @@ blueprint:
       description: Select one or more binary_sensors (motion or occupancy).
       selector:
         entity:
-          multiple: false
+          multiple: true
           domain: binary_sensor
           device_class:
             - motion
