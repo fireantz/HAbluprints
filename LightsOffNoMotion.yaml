@@ -16,13 +16,15 @@ blueprint:
           device_class:
             - motion
             - occupancy
-    target_light:
+
+    lights:
       name: Light(s)
-      description: One or more lights or light groups to turn off
+      description: Select one or more light entities to turn off
       selector:
-        target:
-          entity:
-            domain: light
+        entity:
+          domain: light
+          multiple: true
+
     delay_time:
       name: Vacancy Delay
       description: Time that ALL sensors must remain clear before lights turn off
@@ -42,16 +44,17 @@ trigger:
     event_type: automation_reloaded
 
 condition:
-  # Only bother if the light is currently on
-  - condition: state
-    entity_id: !input target_light
-    state: "on"
-
-action:
-  # If anything is ON, don't proceed
+  # Only proceed if at least one of the selected lights is currently ON
   - condition: template
     value_template: >
-      {% set sensors = expand(inputs.presence_sensors) %}
+      {% set ls = expand(!input lights) %}
+      {{ ls | selectattr('state','eq','on') | list | count > 0 }}
+
+action:
+  # If anything is ON, don't proceed to shutoff timer yet
+  - condition: template
+    value_template: >
+      {% set sensors = expand(!input presence_sensors) %}
       {{ sensors | selectattr('state','eq','on') | list | count == 0 }}
 
   # Wait the full delay UNLESS any sensor fires to 'on' again (which cancels)
@@ -69,8 +72,9 @@ action:
   # Double-check all sensors are still OFF (defensive check)
   - condition: template
     value_template: >
-      {% set sensors = expand(inputs.presence_sensors) %}
+      {% set sensors = expand(!input presence_sensors) %}
       {{ sensors | selectattr('state','eq','off') | list | count == (sensors | list | count) }}
 
   - service: light.turn_off
-    target: !input target_light
+    target:
+      entity_id: !input lights
