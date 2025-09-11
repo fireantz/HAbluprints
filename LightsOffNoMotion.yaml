@@ -3,7 +3,7 @@ blueprint:
   description: >
     Turns off selected lights only after ALL chosen motion/occupancy sensors
     have been clear (off) for the entire delay period. Works with mixed sensors
-    (e.g., PIR, mmWave, Third Reality 3RMS16BZ).
+    (e.g., PIR, mmWave, Third Reality 3RMS16BZ via ZHA/Zigbee2MQTT).
   domain: automation
   input:
     presence_sensors:
@@ -32,22 +32,45 @@ blueprint:
 
 mode: restart
 
+# Re-evaluate whenever any sensor changes, or on reload/start
 trigger:
   - platform: state
     entity_id: !input presence_sensors
-    to: "off"
-    for: !input delay_time
+  - platform: homeassistant
+    event: start
+  - platform: event
+    event_type: automation_reloaded
 
 condition:
+  # Only bother if the light is currently on
   - condition: state
     entity_id: !input target_light
     state: "on"
-  # Make sure all sensors are actually off
-  - condition: template
-    value_template: >
-      {% set sensors = expand(!input presence_sensors) %}
-      {{ sensors | selectattr('state','eq','on') | list | count == 0 }}
 
 action:
+  # If anything is ON, don't proceed
+  - condition: template
+    value_template: >
+      {% set sensors = expand(inputs.presence_sensors) %}
+      {{ sensors | selectattr('state','eq','on') | list | count == 0 }}
+
+  # Wait the full delay UNLESS any sensor fires to 'on' again (which cancels)
+  - wait_for_trigger:
+      - platform: state
+        entity_id: !input presence_sensors
+        to: "on"
+    timeout: !input delay_time
+    continue_on_timeout: true
+
+  # Only continue if the wait TIMED OUT (meaning no sensor turned 'on')
+  - condition: template
+    value_template: "{{ wait.trigger is none }}"
+
+  # Double-check all sensors are still OFF (defensive check)
+  - condition: template
+    value_template: >
+      {% set sensors = expand(inputs.presence_sensors) %}
+      {{ sensors | selectattr('state','eq','off') | list | count == (sensors | list | count) }}
+
   - service: light.turn_off
     target: !input target_light
