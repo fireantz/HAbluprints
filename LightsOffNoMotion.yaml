@@ -1,60 +1,77 @@
 blueprint:
-  name: Auto Turn Off Lights After Vacancy (Multi-Sensor)
+  name: Auto Turn Off Lights After Vacancy (Single Trigger, Multi-Sensor Check)
   description: >
     Turns off selected lights only after ALL chosen motion/occupancy sensors
-    have been clear (off) for the entire delay period. Works with mixed sensors
-    (e.g., PIR, mmWave, Third Reality 3RMS16BZ via ZHA/Zigbee2MQTT).
+    have remained clear (off) for the entire delay period. A single sensor is
+    used as the trigger; any sensor going ON during the delay cancels the turn-off.
+    Works with mixed sensors (PIR, mmWave, Third Reality 3RMS16BZ via ZHA/Zigbee2MQTT).
   domain: automation
+
   input:
-    presence_sensors:
-      name: Motion/Occupancy Sensors
-      description: Select one or more binary_sensors (motion or occupancy).
+    trigger_sensor:
+      name: Trigger Sensor (single)
+      description: Single motion/occupancy binary_sensor that initiates the vacancy timer
       selector:
         entity:
-          multiple: false
           domain: binary_sensor
           device_class:
             - motion
             - occupancy
-    target_light:
+          multiple: false
+
+    presence_sensors:
+      name: Motion/Occupancy Sensors (monitored set)
+      description: One or more binary_sensors (motion or occupancy) that must stay OFF for the whole delay
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - motion
+            - occupancy
+          multiple: true
+
+    lights:
       name: Light(s)
       description: One or more lights or light groups to turn off
       selector:
-        target:
-          entity:
-            domain: light
+        entity:
+          domain: light
+          multiple: true
+
     delay_time:
       name: Vacancy Delay
-      description: Time that ALL sensors must remain clear before lights turn off
+      description: Time that ALL monitored sensors must remain clear before lights turn off
       default: 02:00:00
       selector:
         duration: {}
 
 mode: restart
 
-# Re-evaluate whenever any sensor changes, or on reload/start
+# Re-evaluate on trigger sensor going OFF, plus HA start/reload
 trigger:
   - platform: state
-    entity_id: !input presence_sensors
+    entity_id: !input trigger_sensor
+    to: "off"
   - platform: homeassistant
     event: start
   - platform: event
     event_type: automation_reloaded
 
 condition:
-  # Only bother if the light is currently on
-  - condition: state
-    entity_id: !input target_light
-    state: "on"
-
-action:
-  # If anything is ON, don't proceed
+  # Only proceed if at least one selected light is currently ON
   - condition: template
     value_template: >
-      {% set sensors = expand(inputs.presence_sensors) %}
-      {{ sensors | selectattr('state','eq','on') | list | count == 0 }}
+      {% set ls = expand(!input lights) %}
+      {{ ls | selectattr('state','eq','on') | list | count > 0 }}
 
-  # Wait the full delay UNLESS any sensor fires to 'on' again (which cancels)
+  # Start only if ALL monitored sensors are currently OFF
+  - condition: template
+    value_template: >
+      {% set s = expand(!input presence_sensors) %}
+      {{ s | selectattr('state','eq','on') | list | count == 0 }}
+
+action:
+  # Wait the full delay UNLESS any monitored sensor turns ON (which cancels)
   - wait_for_trigger:
       - platform: state
         entity_id: !input presence_sensors
@@ -62,15 +79,16 @@ action:
     timeout: !input delay_time
     continue_on_timeout: true
 
-  # Only continue if the wait TIMED OUT (meaning no sensor turned 'on')
+  # Only continue if the wait TIMED OUT (meaning no sensor turned 'on' during the delay)
   - condition: template
     value_template: "{{ wait.trigger is none }}"
 
-  # Double-check all sensors are still OFF (defensive check)
+  # Defensive re-check: ensure ALL monitored sensors are still OFF
   - condition: template
     value_template: >
-      {% set sensors = expand(inputs.presence_sensors) %}
-      {{ sensors | selectattr('state','eq','off') | list | count == (sensors | list | count) }}
+      {% set s = expand(!input presence_sensors) %}
+      {{ s | selectattr('state','eq','off') | list | count == (s | list | count) }}
 
   - service: light.turn_off
-    target: !input target_light
+    target:
+      entity_id: !input lights
