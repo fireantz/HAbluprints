@@ -1,53 +1,18 @@
 blueprint:
   name: Auto Turn Off Lights After Vacancy (Multi-Sensor)
   description: >
-    Turns off selected lights only after ALL chosen motion/occupancy sensors
-    have been clear (off) for the entire delay period. Works with mixed sensors
-    (e.g., PIR, mmWave, Third Reality 3RMS16BZ).
+    Turns off selected lights after ALL chosen binary_sensors (motion/occupancy) have
+    been clear (off) for the entire delay. Works with PIR (e.g., Third Reality 3RMS16BZ),
+    mmWave occupancy, etc.
   domain: automation
   input:
     presence_sensors:
       name: Motion/Occupancy Sensors
-      description: Select one or more binary_sensors (motion or occupancy).
+      description: Select one or more binary_sensors used to determine vacancy
       selector:
         entity:
-          multiple: true
           domain: binary_sensor
-          device_class:
-            - motion
-            - occupancy
-    target_light:
+          multiple: true
+    lights:
       name: Light(s)
-      description: One or more lights or light groups to turn off
-      selector:
-        target:
-          entity:
-            domain: light
-    delay_time:
-      name: Vacancy Delay
-      description: Time that ALL sensors must remain clear before lights turn off
-      default: 02:00:00
-      selector:
-        duration: {}
-
-mode: restart
-
-trigger:
-  - platform: state
-    entity_id: !input presence_sensors
-    to: "off"
-    for: !input delay_time
-
-condition:
-  - condition: state
-    entity_id: !input target_light
-    state: "on"
-  # Make sure all sensors are actually off
-  - condition: template
-    value_template: >
-      {% set sensors = expand(!input presence_sensors) %}
-      {{ sensors | selectattr('state','eq','on') | list | count == 0 }}
-
-action:
-  - service: light.turn_off
-    target: !input target_light
+      description: Select one or more light
