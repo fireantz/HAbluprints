@@ -1,44 +1,41 @@
 blueprint:
-  name: Auto Turn Off Lights After No Motion/Occupancy
-  description: Turns off selected lights if no motion/occupancy is detected for a set period of time.
+  name: Auto Turn Off Lights After Vacancy (Multi-Sensor)
+  description: >
+    Turns off selected lights only after ALL chosen motion/occupancy sensors
+    have been clear (off) for the entire delay period. Works with mixed sensors
+    (e.g., PIR, mmWave, Third Reality 3RMS16BZ via ZHA/Zigbee2MQTT).
   domain: automation
   input:
-    presence_sensor:
-      name: Motion/Occupancy Sensor
-      description: Choose a binary_sensor with device class motion or occupancy
+    presence_sensors:
+      name: Motion/Occupancy Sensors
+      description: Select one or more binary_sensors (motion or occupancy).
       selector:
         entity:
+          multiple: true
           domain: binary_sensor
           device_class:
             - motion
             - occupancy
     target_light:
-      name: Light
-      description: The light or light group to turn off
+      name: Light(s)
+      description: One or more lights or light groups to turn off
       selector:
-        entity:
-          domain: light
+        target:
+          entity:
+            domain: light
     delay_time:
-      name: Delay (No Motion/Occupancy Time)
-      description: Time to wait after no motion/occupancy before turning off the light
+      name: Vacancy Delay
+      description: Time that ALL sensors must remain clear before lights turn off
       default: 02:00:00
       selector:
         duration: {}
 
-mode: single
+mode: restart
 
+# Re-evaluate whenever any sensor changes, or on reload/start
 trigger:
   - platform: state
-    entity_id: !input presence_sensor
-    to: "off"
-    for: !input delay_time
-
-condition:
-  - condition: state
-    entity_id: !input target_light
-    state: "on"
-
-action:
-  - service: light.turn_off
-    target:
-      entity_id: !input target_light
+    entity_id: !input presence_sensors
+  - platform: homeassistant
+    event: start
+  - pl
